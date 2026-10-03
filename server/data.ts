@@ -217,6 +217,34 @@ const responseOverrides: Record<
   },
 };
 
+interface RevisionSeed {
+  note: string;
+  responseText?: string;
+  attachmentName?: string;
+  proofFingerprint?: string;
+  submittedAt: string;
+}
+
+/** 评审期间的供应商补交，每次补交生成一个新的响应版本。 */
+const revisionSeeds: Record<string, RevisionSeed[]> = {
+  "C004-SUP-B": [
+    {
+      note: "供应商补交高可用跨机房切换演练记录与签署页。",
+      responseText:
+        "北辰信息提交响应正文（第 2 版），补充高可用跨机房切换演练记录、演练签署页和适配清单。",
+      attachmentName: "高可用切换演练记录.pdf",
+      proofFingerprint: "PROOF-HA-B-2026",
+      submittedAt: "2026-09-29T10:30:00+08:00",
+    },
+  ],
+  "C009-SUP-C": [
+    {
+      note: "第 2 轮澄清回复：补充值班表、升级路径和平台告警截图。",
+      submittedAt: "2026-09-27T14:20:00+08:00",
+    },
+  ],
+};
+
 const reviewFactories: Array<{
   responseId: string;
   reviewer: string;
@@ -292,6 +320,8 @@ const clarifications: Clarification[] = [
     requestedAt: "2026-09-27T09:00:00+08:00",
     dueAt: "2026-09-28T18:00:00+08:00",
     status: "overdue",
+    responseVersion: 1,
+    operationId: "SEED-CL-001",
   },
   {
     id: "CL-002",
@@ -302,6 +332,8 @@ const clarifications: Clarification[] = [
     requestedAt: "2026-09-28T14:30:00+08:00",
     dueAt: "2026-10-02T18:00:00+08:00",
     status: "open",
+    responseVersion: 1,
+    operationId: "SEED-CL-002",
   },
   {
     id: "CL-003",
@@ -314,6 +346,10 @@ const clarifications: Clarification[] = [
     dueAt: "2026-09-28T18:00:00+08:00",
     respondedAt: "2026-09-27T14:20:00+08:00",
     status: "responded",
+    responseVersion: 1,
+    respondedVersion: 2,
+    operationId: "SEED-CL-003",
+    responseOperationId: "SEED-CL-003-RESP",
   },
 ];
 
@@ -332,24 +368,55 @@ const makeResponse = (
     Math.round(maxScore * 0.64),
   ];
   const override = responseOverrides[id] ?? {};
+  const initialText =
+    clause.type === "mandatory"
+      ? `${supplier.name}已按采购要求提交说明与支持材料。`
+      : `${supplier.name}提交响应正文，并声明可满足条款要求，分值依据需评审员复核。`;
+  const initialAttachment =
+    override.attachmentName ?? `${supplier.name}-${clause.code}-证明材料.pdf`;
+  const initialFingerprint =
+    override.proofFingerprint ?? `PROOF-${clause.id}-${supplier.id}`;
+  const initialSubmittedAt = `2026-09-${String(22 + ((clauseIndex + supplierIndex) % 4)).padStart(2, "0")}T16:20:00+08:00`;
+  const submittedBy = `${supplier.name}投标专员`;
+  const extraRevisions = revisionSeeds[id] ?? [];
+  const revisions = [
+    {
+      version: 1,
+      operationId: `SEED-${id}-R1`,
+      responseText: initialText,
+      attachmentName: initialAttachment,
+      proofFingerprint: initialFingerprint,
+      note: "首次响应提交。",
+      submittedBy,
+      submittedAt: initialSubmittedAt,
+    },
+    ...extraRevisions.map((revision, index) => ({
+      version: index + 2,
+      operationId: `SEED-${id}-R${index + 2}`,
+      responseText: revision.responseText ?? initialText,
+      attachmentName: revision.attachmentName ?? initialAttachment,
+      proofFingerprint: revision.proofFingerprint ?? initialFingerprint,
+      note: revision.note,
+      submittedBy,
+      submittedAt: revision.submittedAt,
+    })),
+  ];
+  const latest = revisions[revisions.length - 1];
   const base: SupplierResponse = {
     id,
     clauseId: clause.id,
     supplierId: supplier.id,
     supplierName: supplier.name,
     status: override.status ?? defaultStatus,
-    responseText:
-      clause.type === "mandatory"
-        ? `${supplier.name}已按采购要求提交说明与支持材料。`
-        : `${supplier.name}提交响应正文，并声明可满足条款要求，分值依据需评审员复核。`,
+    responseText: latest.responseText,
     claimedScore: override.claimedScore ?? scorePattern[supplierIndex] ?? 0,
-    attachmentName:
-      override.attachmentName ?? `${supplier.name}-${clause.code}-证明材料.pdf`,
-    proofFingerprint:
-      override.proofFingerprint ?? `PROOF-${clause.id}-${supplier.id}`,
-    submittedBy: `${supplier.name}投标专员`,
-    submittedAt: `2026-09-${String(22 + ((clauseIndex + supplierIndex) % 4)).padStart(2, "0")}T16:20:00+08:00`,
+    attachmentName: latest.attachmentName,
+    proofFingerprint: latest.proofFingerprint,
+    submittedBy,
+    submittedAt: latest.submittedAt,
     reviewRound: 1,
+    responseVersion: latest.version,
+    revisions,
     reviews: [],
     clarifications: [],
   };
@@ -358,6 +425,10 @@ const makeResponse = (
     .map((item, index) => ({
       id: `OP-${id}-${index + 1}`,
       ...item,
+      responseVersion: 1,
+      operationId: `SEED-OP-${id}-${index + 1}`,
+      confirmedAt: item.createdAt,
+      confirmedBy: item.reviewer,
     }));
   base.clarifications = clarifications.filter((item) => item.responseId === id);
   return base;
@@ -368,6 +439,12 @@ const responses: SupplierResponse[] = clauses.flatMap((clause, clauseIndex) =>
     makeResponse(clause, supplierIndex, clauseIndex),
   ),
 );
+
+const snapshotAt = (versionByResponse: Record<string, number>) =>
+  responses.map((response) => ({
+    responseId: response.id,
+    responseVersion: versionByResponse[response.id] ?? 1,
+  }));
 
 const versions = [
   {
@@ -381,6 +458,9 @@ const versions = [
     clauseCount: clauses.length,
     responseCount: responses.length,
     contentHash: "a84f2d17",
+    operationId: "SEED-VER-001",
+    confirmedOpinions: 0,
+    responseSnapshots: snapshotAt({}),
   },
   {
     id: "VER-002",
@@ -393,6 +473,9 @@ const versions = [
     clauseCount: clauses.length,
     responseCount: responses.length,
     contentHash: "d91c6b42",
+    operationId: "SEED-VER-002",
+    confirmedOpinions: 6,
+    responseSnapshots: snapshotAt({ "C009-SUP-C": 2 }),
   },
 ];
 
@@ -429,6 +512,22 @@ const auditLogs: AuditLog[] = [
     entity: "VER-002",
     detail: "创建 V2 工作版本，保留 V1 定稿快照。",
   },
+  {
+    id: "AUD-005",
+    at: "2026-09-27T14:20:00+08:00",
+    actor: "采购专员",
+    action: "回复澄清",
+    entity: "CL-003",
+    detail: "南岭科技 C.1.2 第 2 轮澄清回复已登记，响应更新为第 2 版。",
+  },
+  {
+    id: "AUD-006",
+    at: "2026-09-29T10:30:00+08:00",
+    actor: "采购专员",
+    action: "响应补交",
+    entity: "C004-SUP-B",
+    detail: "北辰信息 B.1 补交登记为第 2 版，2 条评审意见待重新确认。",
+  },
 ];
 
 const buildSeed = (): ReviewDatabase => ({
@@ -439,6 +538,11 @@ const buildSeed = (): ReviewDatabase => ({
   suppliers: structuredClone(suppliers),
 });
 
+const isCurrentShape = (data: ReviewDatabase): boolean =>
+  Array.isArray(data.responses) &&
+  typeof data.responses[0]?.responseVersion === "number" &&
+  Array.isArray(data.responses[0]?.revisions);
+
 class ReviewDataStore {
   private readonly runtimePath = join(process.cwd(), "server", "runtime-data.json");
   private data: ReviewDatabase;
@@ -446,9 +550,10 @@ class ReviewDataStore {
   constructor() {
     if (existsSync(this.runtimePath)) {
       try {
-        this.data = JSON.parse(
+        const loaded = JSON.parse(
           readFileSync(this.runtimePath, "utf8"),
         ) as ReviewDatabase;
+        this.data = isCurrentShape(loaded) ? loaded : buildSeed();
       } catch {
         this.data = buildSeed();
       }

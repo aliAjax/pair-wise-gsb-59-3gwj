@@ -70,6 +70,18 @@
   }
 }
 
+.tag-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.version-ref {
+  color: #6a7e84;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
 .score {
   color: #1d5e62;
   font-size: 15px;

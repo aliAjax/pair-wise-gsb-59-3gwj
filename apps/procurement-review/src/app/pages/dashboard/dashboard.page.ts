@@ -13,6 +13,7 @@ import {
   type SupplierResponse,
 } from "../../core/models/review.models";
 import {
+  currentOpinions,
   hasReviewDifference,
   selectAuditLogs,
   selectClauses,
@@ -104,8 +105,10 @@ export class DashboardPage {
       return 0;
     }
     const reviewed = clauses.filter((clause) =>
-      clause.responses.every((response) => response.reviews.length > 0),
+      clause.responses.every((response) => currentOpinions(response).length > 0),
     ).length;
     return Math.round((reviewed / clauses.length) * 100);
   });
+
+  readonly currentOpinions = currentOpinions;
 }

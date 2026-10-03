@@ -21,6 +21,14 @@ export interface ReviewerOpinion {
   score: number;
   comment: string;
   createdAt: string;
+  /** 意见所依据的响应版本（所见版本）。 */
+  responseVersion: number;
+  /** 幂等操作标识。 */
+  operationId: string;
+  confirmedAt?: string;
+  confirmedBy?: string;
+  /** 响应补交后旧版意见作废，待重新确认。 */
+  stale: boolean;
 }
 
 export interface Clarification {
@@ -34,6 +42,21 @@ export interface Clarification {
   dueAt: string;
   respondedAt?: string;
   status: ClarificationStatus;
+  /** 发起澄清时的响应版本。 */
+  responseVersion: number;
+  /** 登记回复后生成的响应版本。 */
+  respondedVersion?: number;
+}
+
+export interface ResponseRevision {
+  version: number;
+  operationId: string;
+  responseText: string;
+  attachmentName: string;
+  proofFingerprint: string;
+  note: string;
+  submittedBy: string;
+  submittedAt: string;
 }
 
 export interface SupplierResponse {
@@ -49,6 +72,9 @@ export interface SupplierResponse {
   submittedBy: string;
   submittedAt: string;
   reviewRound: number;
+  /** 当前响应版本，每次补交递增。 */
+  responseVersion: number;
+  revisions: ResponseRevision[];
   reviews: ReviewerOpinion[];
   clarifications: Clarification[];
 }
@@ -72,6 +98,11 @@ export interface ClauseTreeNode extends Clause {
   children: ClauseTreeNode[];
 }
 
+export interface ResponseVersionSnapshot {
+  responseId: string;
+  responseVersion: number;
+}
+
 export interface ReviewVersion {
   id: string;
   version: string;
@@ -83,6 +114,11 @@ export interface ReviewVersion {
   clauseCount: number;
   responseCount: number;
   contentHash: string;
+  operationId: string;
+  /** 定稿时基于当前响应版本已确认的意见数量。 */
+  confirmedOpinions: number;
+  /** 定稿时各响应所处的版本快照。 */
+  responseSnapshots: ResponseVersionSnapshot[];
 }
 
 export interface AuditLog {
@@ -101,6 +137,7 @@ export interface DashboardStats {
   differences: number;
   overdueClarifications: number;
   reusedProofs: number;
+  staleOpinions: number;
   activeVersion: string;
 }
 
@@ -148,6 +185,30 @@ export interface AssessmentInput {
   comment: string;
   reviewer: string;
   role: ReviewRole;
+  /** 提交时所见的响应版本。 */
+  baseVersion: number;
+  /** 幂等操作标识，重复或迟到写入只接纳一次。 */
+  operationId: string;
+}
+
+export interface ConfirmOpinionInput {
+  opinionId: string;
+  /** 确认人所见的当前响应版本。 */
+  baseVersion: number;
+  actor: string;
+  role: ReviewRole;
+}
+
+export interface ResponseRevisionInput {
+  responseId: string;
+  baseVersion: number;
+  operationId: string;
+  responseText: string;
+  attachmentName: string;
+  proofFingerprint: string;
+  note: string;
+  actor: string;
+  role: ReviewRole;
 }
 
 export interface ClarificationInput {
@@ -155,18 +216,22 @@ export interface ClarificationInput {
   requestText: string;
   dueAt: string;
   actor: string;
+  baseVersion: number;
+  operationId: string;
 }
 
 export interface ClarificationResponseInput {
   clarificationId: string;
   responseText: string;
   actor: string;
+  operationId: string;
 }
 
 export interface FinalizeVersionInput {
   label: string;
   actor: string;
   role: ReviewRole;
+  operationId: string;
 }
 
 export const roleProfiles: Record<ReviewRole, { name: string; label: string }> = {
@@ -195,3 +260,8 @@ export const statusSeverity: Record<ComplianceStatus, string> = {
   clarification: "warn",
   pending: "secondary",
 };
+
+export const createOperationId = (): string =>
+  typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `OP-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;

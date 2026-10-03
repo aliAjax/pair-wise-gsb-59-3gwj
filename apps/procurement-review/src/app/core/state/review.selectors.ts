@@ -4,6 +4,7 @@ import type {
   ClauseTreeNode,
   ComplianceStatus,
   ReviewState,
+  ReviewerOpinion,
   SupplierResponse,
 } from "../models/review.models";
 
@@ -70,9 +71,19 @@ export const selectToast = createSelector(
   (state) => state.toast,
 );
 
+/** 当前响应版本上仍有效的意见（补交后未重新确认的旧版意见不计入）。 */
+export const currentOpinions = (
+  response: SupplierResponse,
+): ReviewerOpinion[] => response.reviews.filter((review) => !review.stale);
+
+/** 响应补交后已作废、待重新确认的旧版意见。 */
+export const outdatedOpinions = (
+  response: SupplierResponse,
+): ReviewerOpinion[] => response.reviews.filter((review) => review.stale);
+
 export const hasReviewDifference = (response: SupplierResponse): boolean => {
   const decisions = new Set(
-    response.reviews
+    currentOpinions(response)
       .filter((review) => review.decision !== "clarification")
       .map((review) => review.decision),
   );
@@ -210,6 +221,29 @@ export const selectReusedProofs = createSelector(
       .filter(([, entries]) => entries.length > 1)
       .map(([fingerprint, entries]) => ({ fingerprint, entries }));
   },
+);
+
+export interface OpinionVersionItem {
+  clause: Clause;
+  response: SupplierResponse;
+  opinion: ReviewerOpinion;
+}
+
+/** 全部评审意见及其版本状态，用于小组复核和审计导出。 */
+export const selectOpinionVersionItems = createSelector(
+  selectClauses,
+  (clauses): OpinionVersionItem[] =>
+    clauses.flatMap((clause) =>
+      clause.responses.flatMap((response) =>
+        response.reviews.map((opinion) => ({ clause, response, opinion })),
+      ),
+    ),
+);
+
+/** 已作废、待重新确认的旧版意见。 */
+export const selectStaleOpinionItems = createSelector(
+  selectOpinionVersionItems,
+  (items) => items.filter((item) => item.opinion.stale),
 );
 
 export const responseDecisionSummary = (

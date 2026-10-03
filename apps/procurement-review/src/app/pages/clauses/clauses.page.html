@@ -3,10 +3,18 @@
     <div>
       <h2>条款评审</h2>
       <p>
-        按技术条款树逐条查看供应商响应、证明材料和澄清记录；评审员意见独立保存。
+        按技术条款树逐条查看供应商响应、证明材料和澄清记录；评审意见独立保存，并按响应版本确认效力。
       </p>
     </div>
     <div class="inline-actions">
+      <p-button
+        label="登记补交"
+        icon="pi pi-upload"
+        severity="secondary"
+        [outlined]="true"
+        [disabled]="!selectedResponse() || !canRevise()"
+        (onClick)="openRevisionDialog()"
+      />
       <p-button
         label="发起澄清"
         icon="pi pi-comments"
@@ -91,6 +99,12 @@
               (click)="selectResponse(response)"
             >
               <span>{{ response.supplierName }}</span>
+              @if (staleCount(response) > 0) {
+                <p-tag
+                  [value]="staleCount(response) + ' 条待重新确认'"
+                  severity="warn"
+                />
+              }
               <app-status-tag [status]="response.status" />
             </button>
           }
@@ -107,7 +121,13 @@
                     {{ response.submittedAt | date: "yyyy-MM-dd HH:mm" }}
                   </p>
                 </div>
-                <app-status-tag [status]="response.status" />
+                <div class="tag-row">
+                  <p-tag
+                    [value]="'第 ' + response.responseVersion + ' 版'"
+                    severity="info"
+                  />
+                  <app-status-tag [status]="response.status" />
+                </div>
               </div>
               <div class="data-panel-body">
                 <p class="response-text">{{ response.responseText }}</p>
@@ -134,16 +154,42 @@
                 @if (response.reviews.length) {
                   <div class="opinion-list">
                     @for (review of response.reviews; track review.id) {
-                      <article>
+                      <article [class.stale-opinion]="review.stale">
                         <header>
                           <strong>{{ review.reviewer }}</strong>
                           <app-status-tag [status]="review.decision" />
                           @if (clause.type === "scoring") {
                             <span>{{ review.score }} 分</span>
                           }
+                          <span class="version-ref">
+                            依据第 {{ review.responseVersion }} 版
+                          </span>
+                          @if (review.stale) {
+                            <p-tag value="待重新确认" severity="warn" />
+                          }
                           <time>{{ review.createdAt | date: "MM-dd HH:mm" }}</time>
                         </header>
                         <p>{{ review.comment }}</p>
+                        @if (review.stale) {
+                          <div class="stale-note">
+                            <span>
+                              该意见基于第 {{ review.responseVersion }} 版响应，
+                              当前为第 {{ response.responseVersion }} 版，已作废不计入结论。
+                            </span>
+                            @if (canReview()) {
+                              <p-button
+                                [label]="
+                                  '按第 ' + response.responseVersion + ' 版重新确认'
+                                "
+                                icon="pi pi-check-circle"
+                                size="small"
+                                severity="warn"
+                                [outlined]="true"
+                                (onClick)="confirmOpinion(review, response)"
+                              />
+                            }
+                          </div>
+                        }
                       </article>
                     }
                   </div>
@@ -164,6 +210,14 @@
                           <app-clarification-tag
                             [status]="clarification.status"
                           />
+                          <span class="version-ref">
+                            依据第 {{ clarification.responseVersion }} 版
+                          </span>
+                          @if (clarification.respondedVersion) {
+                            <span class="version-ref">
+                              回复生成第 {{ clarification.respondedVersion }} 版
+                            </span>
+                          }
                           <time>
                             截止
                             {{ clarification.dueAt | date: "yyyy-MM-dd HH:mm" }}
@@ -181,6 +235,28 @@
                 } @else {
                   <p class="muted">没有澄清记录。</p>
                 }
+
+                <h4>补交记录</h4>
+                <div class="clarification-list">
+                  @for (revision of response.revisions; track revision.version) {
+                    <article>
+                      <header>
+                        <strong>第 {{ revision.version }} 版</strong>
+                        @if (revision.version === response.responseVersion) {
+                          <p-tag value="当前版本" severity="info" />
+                        }
+                        <time>
+                          {{ revision.submittedAt | date: "yyyy-MM-dd HH:mm" }}
+                        </time>
+                      </header>
+                      <p>{{ revision.note }}</p>
+                      <p class="muted">
+                        {{ revision.submittedBy }} ·
+                        {{ revision.attachmentName }}
+                      </p>
+                    </article>
+                  }
+                </div>
               </div>
             </section>
 
@@ -188,7 +264,10 @@
               <div class="data-panel-header">
                 <div>
                   <h3>提交独立意见</h3>
-                  <p>当前角色：{{ role() }}</p>
+                  <p>
+                    当前角色：{{ role() }} · 依据第
+                    {{ response.responseVersion }} 版响应
+                  </p>
                 </div>
               </div>
               <form
@@ -313,4 +392,88 @@
       />
     </div>
   </form>
+</p-dialog>
+
+<p-dialog
+  header="登记供应商补交"
+  [modal]="true"
+  [visible]="revisionVisible()"
+  (visibleChange)="revisionVisible.set($event)"
+  [style]="{ width: 'min(560px, 94vw)' }"
+>
+  @if (selectedResponse(); as response) {
+    <form
+      class="dialog-form"
+      [formGroup]="revisionForm"
+      (ngSubmit)="submitRevision()"
+    >
+      <div class="revision-note">
+        补交登记后响应升为第 {{ response.responseVersion + 1 }} 版，
+        依据第 {{ response.responseVersion }} 版的未确认意见将作废并待重新确认。
+      </div>
+      <div class="field">
+        <label for="revision-text">补交后响应内容</label>
+        <textarea
+          id="revision-text"
+          pTextarea
+          formControlName="responseText"
+          rows="4"
+          placeholder="登记补交后的响应正文"
+        ></textarea>
+        @if (
+          revisionForm.controls.responseText.touched &&
+          revisionForm.controls.responseText.invalid
+        ) {
+          <small class="error">补交响应内容至少需要 6 个字符。</small>
+        }
+      </div>
+      <div class="field">
+        <label for="revision-attachment">证明文件</label>
+        <input
+          id="revision-attachment"
+          pInputText
+          formControlName="attachmentName"
+          placeholder="补交材料文件名"
+        />
+      </div>
+      <div class="field">
+        <label for="revision-fingerprint">证明指纹</label>
+        <input
+          id="revision-fingerprint"
+          pInputText
+          formControlName="proofFingerprint"
+          placeholder="补交材料指纹"
+        />
+      </div>
+      <div class="field">
+        <label for="revision-note">补交说明</label>
+        <textarea
+          id="revision-note"
+          pTextarea
+          formControlName="note"
+          rows="3"
+          placeholder="说明本次补交的内容和原因"
+        ></textarea>
+        @if (
+          revisionForm.controls.note.touched && revisionForm.controls.note.invalid
+        ) {
+          <small class="error">补交说明至少需要 4 个字符。</small>
+        }
+      </div>
+      <div class="inline-actions dialog-actions">
+        <p-button
+          label="取消"
+          severity="secondary"
+          [outlined]="true"
+          (onClick)="revisionVisible.set(false)"
+        />
+        <p-button
+          type="submit"
+          label="登记为新版本"
+          icon="pi pi-upload"
+          [disabled]="revisionForm.invalid"
+        />
+      </div>
+    </form>
+  }
 </p-dialog>

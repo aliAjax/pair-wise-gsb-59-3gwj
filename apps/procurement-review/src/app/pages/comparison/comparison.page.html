@@ -137,14 +137,23 @@
             >
               @if (response) {
                 <div class="cell-stack">
-                  <app-status-tag [status]="response.status" />
+                  <div class="tag-row">
+                    <app-status-tag [status]="response.status" />
+                    <span class="version-ref">第 {{ response.responseVersion }} 版</span>
+                  </div>
                   @if (clause.type === "scoring") {
                     <strong class="score">{{ response.claimedScore }} 分</strong>
                   }
                   <span class="attachment" [title]="response.attachmentName">
                     {{ response.attachmentName }}
                   </span>
-                  <small>{{ response.reviews.length }} 条独立意见</small>
+                  <small>{{ currentOpinionCount(response) }} 条有效意见</small>
+                  @if (staleCount(response) > 0) {
+                    <p-tag
+                      [value]="staleCount(response) + ' 条待重新确认'"
+                      severity="warn"
+                    />
+                  }
                 </div>
               } @else {
                 <span class="muted">无响应</span>
@@ -154,10 +163,17 @@
           <td class="risk-cell">
             @let hasAnyDifference = clause.responses.some(hasDifference);
             @let hasAnyReuse = hasReusedProof(clause);
+            @let hasAnyStale = hasStaleOpinions(clause);
             @if (hasAnyDifference) {
               <span class="risk-item warn">
                 <i class="pi pi-exclamation-circle"></i>
                 评审意见分歧
+              </span>
+            }
+            @if (hasAnyStale) {
+              <span class="risk-item warn">
+                <i class="pi pi-history"></i>
+                意见待重新确认
               </span>
             }
             @if (hasAnyReuse) {
@@ -166,7 +182,7 @@
                 证明重复使用
               </span>
             }
-            @if (!hasAnyDifference && !hasAnyReuse) {
+            @if (!hasAnyDifference && !hasAnyReuse && !hasAnyStale) {
               <span class="muted">未发现冲突</span>
             }
           </td>

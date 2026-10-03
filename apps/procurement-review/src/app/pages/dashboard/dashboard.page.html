@@ -40,6 +40,11 @@
         <small>必须保留各自意见进入复核</small>
       </article>
       <article class="metric">
+        <span>待重新确认</span>
+        <strong class="danger">{{ stats.staleOpinions }}</strong>
+        <small>补交后旧版意见已作废</small>
+      </article>
+      <article class="metric">
         <span>逾期澄清</span>
         <strong class="danger">{{ stats.overdueClarifications }}</strong>
         <small>不得静默关闭或直接定稿</small>
@@ -151,7 +156,10 @@
               <td>{{ item.response.supplierName }}</td>
               <td>
                 <div class="tag-row">
-                  @for (review of item.response.reviews; track review.id) {
+                  @for (
+                    review of currentOpinions(item.response);
+                    track review.id
+                  ) {
                     <span class="review-score">
                       {{ review.reviewer }} · {{ review.score }} 分
                     </span>

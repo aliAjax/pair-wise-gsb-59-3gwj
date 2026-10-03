@@ -178,6 +178,11 @@ h4 {
     background: #fbfcfc;
   }
 
+  article.stale-opinion {
+    border-color: #ecc26a;
+    background: #fffaf0;
+  }
+
   header {
     display: flex;
     align-items: center;
@@ -190,6 +195,11 @@ h4 {
     color: #425a62;
     font-size: 13px;
     line-height: 1.55;
+  }
+
+  p.muted {
+    color: #7a898e;
+    font-size: 12px;
   }
 
   time {
@@ -206,6 +216,34 @@ h4 {
     color: #33565a;
     font-size: 13px;
   }
+}
+
+.version-ref {
+  color: #6a7e84;
+  font-size: 11px;
+}
+
+.stale-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 5px;
+  background: #fdf0d5;
+  color: #7a4a05;
+  font-size: 12px;
+}
+
+.revision-note {
+  padding: 10px 12px;
+  border-left: 3px solid #17706d;
+  background: #ecf6f5;
+  color: #144f4c;
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .review-form {

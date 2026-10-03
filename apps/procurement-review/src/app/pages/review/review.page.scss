@@ -1,6 +1,6 @@
 .version-summary {
   display: grid;
-  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  grid-template-columns: repeat(5, minmax(150px, 1fr));
   gap: 12px;
   margin-bottom: 16px;
 
@@ -94,6 +94,10 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(220px, 1fr));
   gap: 8px;
+
+  &.single {
+    grid-template-columns: minmax(220px, 1fr);
+  }
 
   > div {
     display: grid;

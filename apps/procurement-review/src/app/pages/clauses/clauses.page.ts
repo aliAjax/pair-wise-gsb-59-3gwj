@@ -13,8 +13,9 @@ import {
   ReactiveFormsModule,
   Validators,
 } from "@angular/forms";
-import { toSignal } from "@angular/core/rxjs-interop";
+import { takeUntilDestroyed, toSignal } from "@angular/core/rxjs-interop";
 import { RouterLink } from "@angular/router";
+import { Actions, ofType } from "@ngrx/effects";
 import { Store } from "@ngrx/store";
 import type { TreeNode } from "primeng/api";
 import { AccordionModule } from "primeng/accordion";
@@ -29,14 +30,17 @@ import { TextareaModule } from "primeng/textarea";
 import { TreeModule } from "primeng/tree";
 import {
   complianceLabels,
+  createOperationId,
   roleProfiles,
   type Clause,
   type ComplianceStatus,
+  type ReviewerOpinion,
   type SupplierResponse,
 } from "../../core/models/review.models";
 import { ReviewActions } from "../../core/state/review.actions";
 import {
   hasReviewDifference,
+  outdatedOpinions,
   selectClauseTree,
   selectRole,
 } from "../../core/state/review.selectors";
@@ -73,6 +77,7 @@ import {
 })
 export class ClausesPage {
   private readonly store = inject(Store);
+  private readonly actions$ = inject(Actions);
 
   readonly clauseTree = toSignal(this.store.select(selectClauseTree), {
     initialValue: [],
@@ -84,6 +89,7 @@ export class ClausesPage {
   readonly selectedTreeKey = signal<string | null>(null);
   readonly selectedSupplierId = signal<string | null>(null);
   readonly clarificationVisible = signal(false);
+  readonly revisionVisible = signal(false);
   readonly selectedClause = computed(() => {
     const key = this.selectedTreeKey();
     if (!key) {
@@ -105,6 +111,9 @@ export class ClausesPage {
     );
   });
   readonly canReview = computed(() => this.role() !== "procurement");
+  readonly canRevise = computed(() =>
+    ["procurement", "chair"].includes(this.role()),
+  );
   readonly clauseRisks = computed(() => {
     const clause = this.selectedClause();
     if (!clause) {
@@ -119,6 +128,15 @@ export class ClausesPage {
     }
     if (clause.responses.some(hasReviewDifference)) {
       risks.push("不同评审员意见存在分歧，必须保留并进入小组复核");
+    }
+    const staleCount = clause.responses.reduce(
+      (count, response) => count + outdatedOpinions(response).length,
+      0,
+    );
+    if (staleCount > 0) {
+      risks.push(
+        `供应商响应已补交新版本，${staleCount} 条旧版意见已作废，待重新确认`,
+      );
     }
     if (
       clause.responses.some((response) =>
@@ -178,7 +196,41 @@ export class ClausesPage {
     ),
   });
 
+  readonly revisionForm = new FormGroup({
+    responseText: new FormControl("", {
+      nonNullable: true,
+      validators: [Validators.required, Validators.minLength(6)],
+    }),
+    attachmentName: new FormControl("", {
+      nonNullable: true,
+      validators: [Validators.required],
+    }),
+    proofFingerprint: new FormControl("", {
+      nonNullable: true,
+      validators: [Validators.required],
+    }),
+    note: new FormControl("", {
+      nonNullable: true,
+      validators: [Validators.required, Validators.minLength(4)],
+    }),
+  });
+
   readonly minimumClarificationDate = new Date();
+
+  /** 每次提交携带的幂等操作标识；成功后重新生成，失败重试沿用。 */
+  private assessmentOperationId = createOperationId();
+  private clarificationOperationId = createOperationId();
+  private revisionOperationId = createOperationId();
+
+  constructor() {
+    this.actions$
+      .pipe(ofType(ReviewActions.loadReviewDataSuccess), takeUntilDestroyed())
+      .subscribe(() => {
+        this.assessmentOperationId = createOperationId();
+        this.clarificationOperationId = createOperationId();
+        this.revisionOperationId = createOperationId();
+      });
+  }
 
   nodeTemplateData(node: TreeNode): Clause {
     return node.data as Clause;
@@ -194,6 +246,10 @@ export class ClausesPage {
   selectResponse(response: SupplierResponse): void {
     this.selectedSupplierId.set(response.supplierId);
     this.resetAssessmentForm(response);
+  }
+
+  staleCount(response: SupplierResponse): number {
+    return outdatedOpinions(response).length;
   }
 
   submitAssessment(): void {
@@ -215,6 +271,24 @@ export class ClausesPage {
           score: clause.type === "scoring" ? value.score : 0,
           comment: value.comment,
           reviewer: roleProfiles[this.role()].name,
+          role: this.role(),
+          baseVersion: response.responseVersion,
+          operationId: this.assessmentOperationId,
+        },
+      }),
+    );
+  }
+
+  confirmOpinion(review: ReviewerOpinion, response: SupplierResponse): void {
+    if (!this.canReview() || !review.stale) {
+      return;
+    }
+    this.store.dispatch(
+      ReviewActions.confirmOpinion({
+        input: {
+          opinionId: review.id,
+          baseVersion: response.responseVersion,
+          actor: roleProfiles[this.role()].name,
           role: this.role(),
         },
       }),
@@ -243,10 +317,51 @@ export class ClausesPage {
           requestText: value.requestText,
           dueAt: value.dueAt.toISOString(),
           actor: roleProfiles[this.role()].name,
+          baseVersion: response.responseVersion,
+          operationId: this.clarificationOperationId,
         },
       }),
     );
     this.clarificationVisible.set(false);
+  }
+
+  openRevisionDialog(): void {
+    const response = this.selectedResponse();
+    if (!response) {
+      return;
+    }
+    this.revisionForm.reset({
+      responseText: response.responseText,
+      attachmentName: response.attachmentName,
+      proofFingerprint: response.proofFingerprint,
+      note: "",
+    });
+    this.revisionVisible.set(true);
+  }
+
+  submitRevision(): void {
+    const response = this.selectedResponse();
+    if (!response || this.revisionForm.invalid) {
+      this.revisionForm.markAllAsTouched();
+      return;
+    }
+    const value = this.revisionForm.getRawValue();
+    this.store.dispatch(
+      ReviewActions.submitResponseRevision({
+        input: {
+          responseId: response.id,
+          baseVersion: response.responseVersion,
+          operationId: this.revisionOperationId,
+          responseText: value.responseText,
+          attachmentName: value.attachmentName,
+          proofFingerprint: value.proofFingerprint,
+          note: value.note,
+          actor: roleProfiles[this.role()].name,
+          role: this.role(),
+        },
+      }),
+    );
+    this.revisionVisible.set(false);
   }
 
   latestOpinion(

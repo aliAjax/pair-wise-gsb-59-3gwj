@@ -3,7 +3,7 @@
     <div>
       <h2>审计与导出</h2>
       <p>
-        导出评审意见、澄清轮次、版本签字和关键状态变更，原始操作记录不可修改。
+        导出评审意见、澄清轮次、版本签字和关键状态变更；导出内容标注意见版本状态，待重新确认的意见不计入有效结论。
       </p>
     </div>
     <div class="inline-actions">
@@ -36,6 +36,10 @@
     <article>
       <span>已定稿版本</span>
       <strong>{{ finalizedCount() }}</strong>
+    </article>
+    <article>
+      <span>待重新确认意见</span>
+      <strong class="danger">{{ staleItems().length }}</strong>
     </article>
     <article>
       <span>当前导出条数</span>
@@ -115,6 +119,65 @@
       <ng-template pTemplate="emptymessage">
         <tr>
           <td colspan="5">没有符合条件的审计事件。</td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </section>
+
+  <section class="data-panel audit-table-panel">
+    <div class="data-panel-header">
+      <div>
+        <h3>意见版本状态</h3>
+        <p>响应补交后旧版意见作废并标注待重新确认，导出文件同步标注</p>
+      </div>
+      <p-tag
+        [value]="staleItems().length + ' 条待重新确认'"
+        severity="warn"
+      />
+    </div>
+    <p-table
+      [value]="opinionItems()"
+      [paginator]="true"
+      [rows]="8"
+      responsiveLayout="scroll"
+    >
+      <ng-template pTemplate="header">
+        <tr>
+          <th>条款</th>
+          <th>供应商</th>
+          <th>评审员</th>
+          <th>结论</th>
+          <th>意见版本</th>
+          <th>当前响应版本</th>
+          <th>状态</th>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="body" let-item>
+        <tr [class.stale-row]="item.opinion.stale">
+          <td>
+            <span class="mono">{{ item.clause.code }}</span>
+            <div class="table-secondary">{{ item.clause.title }}</div>
+          </td>
+          <td>{{ item.response.supplierName }}</td>
+          <td>{{ item.opinion.reviewer }}</td>
+          <td>
+            <app-status-tag [status]="item.opinion.decision" />
+            <span class="table-secondary"> {{ item.opinion.score }} 分</span>
+          </td>
+          <td class="mono">第 {{ item.opinion.responseVersion }} 版</td>
+          <td class="mono">第 {{ item.response.responseVersion }} 版</td>
+          <td>
+            @if (item.opinion.stale) {
+              <p-tag value="待重新确认" severity="warn" />
+            } @else {
+              <p-tag value="已确认" severity="success" />
+            }
+          </td>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="emptymessage">
+        <tr>
+          <td colspan="7">尚无评审意见。</td>
         </tr>
       </ng-template>
     </p-table>

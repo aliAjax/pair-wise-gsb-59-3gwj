@@ -7,13 +7,21 @@ import { ButtonModule } from "primeng/button";
 import { InputTextModule } from "primeng/inputtext";
 import { SelectModule } from "primeng/select";
 import { TableModule } from "primeng/table";
+import { TagModule } from "primeng/tag";
 import { ReviewActions } from "../../core/state/review.actions";
 import {
   selectAuditLogs,
+  selectOpinionVersionItems,
   selectRole,
+  selectStaleOpinionItems,
   selectVersions,
+  type OpinionVersionItem,
 } from "../../core/state/review.selectors";
-import { roleProfiles } from "../../core/models/review.models";
+import {
+  complianceLabels,
+  roleProfiles,
+} from "../../core/models/review.models";
+import { StatusTagComponent } from "../../shared/status-tag.component";
 
 @Component({
   selector: "app-audit-page",
@@ -24,6 +32,8 @@ import { roleProfiles } from "../../core/models/review.models";
     InputTextModule,
     SelectModule,
     TableModule,
+    TagModule,
+    StatusTagComponent,
   ],
   templateUrl: "./audit.page.html",
   styleUrl: "./audit.page.scss",
@@ -38,6 +48,12 @@ export class AuditPage {
   });
   readonly versions = toSignal(this.store.select(selectVersions), {
     initialValue: [],
+  });
+  readonly opinionItems = toSignal(this.store.select(selectOpinionVersionItems), {
+    initialValue: [] as OpinionVersionItem[],
+  });
+  readonly staleItems = toSignal(this.store.select(selectStaleOpinionItems), {
+    initialValue: [] as OpinionVersionItem[],
   });
   readonly role = toSignal(this.store.select(selectRole), {
     initialValue: "reviewer_a",
@@ -71,27 +87,72 @@ export class AuditPage {
     () => this.versions().filter((version) => version.status === "finalized").length,
   );
 
+  decisionLabel(item: OpinionVersionItem): string {
+    return complianceLabels[item.opinion.decision];
+  }
+
   exportJson(): void {
+    const payload = {
+      generatedAt: new Date().toISOString(),
+      auditLogs: this.filteredLogs(),
+      opinionVersionStatus: this.opinionItems().map((item) => ({
+        clause: `${item.clause.code} ${item.clause.title}`,
+        responseId: item.response.id,
+        supplier: item.response.supplierName,
+        opinionId: item.opinion.id,
+        reviewer: item.opinion.reviewer,
+        decision: this.decisionLabel(item),
+        score: item.opinion.score,
+        opinionVersion: item.opinion.responseVersion,
+        currentResponseVersion: item.response.responseVersion,
+        status: item.opinion.stale ? "待重新确认" : "已确认",
+      })),
+    };
     this.download(
       "procurement-review-audit.json",
-      JSON.stringify(this.filteredLogs(), null, 2),
+      JSON.stringify(payload, null, 2),
       "application/json;charset=utf-8",
     );
   }
 
   exportCsv(): void {
-    const header = ["时间", "操作人", "动作", "对象", "详情"];
-    const rows = this.filteredLogs().map((log) => [
+    const quote = (value: string) => `"${value.replaceAll('"', '""')}"`;
+    const auditHeader = ["时间", "操作人", "动作", "对象", "详情"];
+    const auditRows = this.filteredLogs().map((log) => [
       log.at,
       log.actor,
       log.action,
       log.entity,
       log.detail,
     ]);
-    const csv = [header, ...rows]
-      .map((row) =>
-        row.map((value) => `"${value.replaceAll('"', '""')}"`).join(","),
-      )
+    const opinionHeader = [
+      "条款",
+      "供应商",
+      "评审员",
+      "结论",
+      "评分",
+      "意见版本",
+      "当前响应版本",
+      "状态",
+    ];
+    const opinionRows = this.opinionItems().map((item) => [
+      `${item.clause.code} ${item.clause.title}`,
+      item.response.supplierName,
+      item.opinion.reviewer,
+      this.decisionLabel(item),
+      String(item.opinion.score),
+      `第 ${item.opinion.responseVersion} 版`,
+      `第 ${item.response.responseVersion} 版`,
+      item.opinion.stale ? "待重新确认" : "已确认",
+    ]);
+    const csv = [
+      auditHeader,
+      ...auditRows,
+      [],
+      opinionHeader,
+      ...opinionRows,
+    ]
+      .map((row) => row.map((value) => quote(value)).join(","))
       .join("\n");
     this.download(
       "procurement-review-audit.csv",

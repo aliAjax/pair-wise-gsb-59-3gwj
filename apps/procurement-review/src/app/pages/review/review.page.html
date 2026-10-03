@@ -3,7 +3,7 @@
     <div>
       <h2>评审版本与小组复核</h2>
       <p>
-        保留每位评审员的独立意见；分歧进入小组复核，已定稿版本不可覆盖。
+        保留每位评审员的独立意见；分歧进入小组复核，已定稿版本不可覆盖，定稿仅采纳当前响应版本已确认的意见。
       </p>
     </div>
     <p-button
@@ -28,6 +28,10 @@
       <strong class="danger">{{ differences().length }}</strong>
     </article>
     <article>
+      <span>待重新确认意见</span>
+      <strong class="danger">{{ staleItems().length }}</strong>
+    </article>
+    <article>
       <span>未完成澄清</span>
       <strong class="danger">{{ pendingClarifications().length }}</strong>
     </article>
@@ -38,7 +42,7 @@
       <div class="data-panel-header">
         <div>
           <h3>版本历史</h3>
-          <p>定稿版本保存内容哈希和签署人</p>
+          <p>定稿版本保存内容哈希、响应版本快照和签署人</p>
         </div>
       </div>
       <p-table [value]="versions()" responsiveLayout="scroll">
@@ -47,7 +51,7 @@
             <th>版本</th>
             <th>名称</th>
             <th>状态</th>
-            <th>响应项</th>
+            <th>已确认意见</th>
             <th>内容哈希</th>
             <th>创建信息</th>
           </tr>
@@ -64,9 +68,9 @@
             </td>
             <td><app-version-tag [status]="version.status" /></td>
             <td>
-              {{ version.responseCount }} 项
+              {{ version.confirmedOpinions }} 条
               <div class="table-secondary">
-                {{ version.clauseCount }} 条条款
+                {{ version.responseSnapshots.length }} 项响应版本快照
               </div>
             </td>
             <td class="mono">{{ version.contentHash }}</td>
@@ -101,7 +105,10 @@
               <strong>
                 {{ item.clause.code }} {{ item.clause.title }}
               </strong>
-              <small>{{ item.response.supplierName }} · 第 {{ item.clarification.round }} 轮</small>
+              <small>
+                {{ item.response.supplierName }} · 第 {{ item.clarification.round }} 轮 ·
+                依据第 {{ item.clarification.responseVersion }} 版响应
+              </small>
               <p>{{ item.clarification.requestText }}</p>
               <time>
                 截止 {{ item.clarification.dueAt | date: "yyyy-MM-dd HH:mm" }}
@@ -125,8 +132,76 @@
   <section class="data-panel difference-panel">
     <div class="data-panel-header">
       <div>
+        <h3>待重新确认意见</h3>
+        <p>响应补交后旧版意见已作废，需意见本人或评审组长按当前版本重新确认后才可定稿。</p>
+      </div>
+      <p-tag
+        [value]="staleItems().length + ' 条待重新确认'"
+        severity="warn"
+      />
+    </div>
+    <p-table [value]="staleItems()" responsiveLayout="scroll">
+      <ng-template pTemplate="header">
+        <tr>
+          <th>条款</th>
+          <th>供应商</th>
+          <th>评审员意见</th>
+          <th>版本变化</th>
+          <th>操作</th>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="body" let-item>
+        <tr>
+          <td>
+            <span class="mono">{{ item.clause.code }}</span>
+            <div class="table-primary">{{ item.clause.title }}</div>
+          </td>
+          <td>{{ item.response.supplierName }}</td>
+          <td>
+            <div class="opinion-grid single">
+              <div>
+                <strong>{{ item.opinion.reviewer }}</strong>
+                <app-status-tag [status]="item.opinion.decision" />
+                <span>{{ item.opinion.score }} 分</span>
+                <p>{{ item.opinion.comment }}</p>
+              </div>
+            </div>
+          </td>
+          <td>
+            <span class="mono">
+              第 {{ item.opinion.responseVersion }} 版 → 第
+              {{ item.response.responseVersion }} 版
+            </span>
+            <div class="table-secondary">
+              {{ item.opinion.createdAt | date: "yyyy-MM-dd HH:mm" }} 提交
+            </div>
+          </td>
+          <td>
+            <p-button
+              label="重新确认"
+              icon="pi pi-check-circle"
+              size="small"
+              severity="warn"
+              [outlined]="true"
+              [disabled]="!canConfirm()"
+              (onClick)="confirmOpinion(item)"
+            />
+          </td>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="emptymessage">
+        <tr>
+          <td colspan="5">没有待重新确认的意见，当前意见均基于最新响应版本。</td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </section>
+
+  <section class="data-panel difference-panel">
+    <div class="data-panel-header">
+      <div>
         <h3>小组复核队列</h3>
-        <p>分歧不能由系统自动合并，必须保留双方意见和最终处理说明。</p>
+        <p>分歧不能由系统自动合并，必须保留双方意见和最终处理说明；已作废意见不参与分歧统计。</p>
       </div>
       <p-tag
         [value]="differences().length + ' 项分歧'"
@@ -151,7 +226,9 @@
           </td>
           <td>
             {{ item.response.supplierName }}
-            <div class="table-secondary">{{ item.response.id }}</div>
+            <div class="table-secondary">
+              {{ item.response.id }} · 第 {{ item.response.responseVersion }} 版
+            </div>
           </td>
           <td>
             <div class="opinion-grid">
@@ -160,6 +237,9 @@
                   <strong>{{ review.reviewer }}</strong>
                   <app-status-tag [status]="review.decision" />
                   <span>{{ review.score }} 分</span>
+                  @if (review.stale) {
+                    <p-tag value="待重新确认" severity="warn" />
+                  }
                   <p>{{ review.comment }}</p>
                 </div>
               }
@@ -170,6 +250,11 @@
             {{ item.response.reviews[item.response.reviews.length - 1]?.score ?? 0 }}
           </td>
           <td>{{ item.response.attachmentName }}</td>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="emptymessage">
+        <tr>
+          <td colspan="5">当前版本上没有评审分歧。</td>
         </tr>
       </ng-template>
     </p-table>
@@ -194,7 +279,8 @@
       />
     </div>
     <div class="finalize-note">
-      定稿前系统会检查未完成澄清。定稿后当前版本会生成内容哈希并锁定签署人。
+      定稿前系统会检查未完成澄清和待重新确认意见。定稿只采纳当前响应版本已确认的意见，
+      并记录各响应版本快照、内容哈希和签署人。
     </div>
     <div class="inline-actions dialog-actions">
       <p-button
@@ -226,6 +312,10 @@
         <strong>{{ item.clause.code }} {{ item.clause.title }}</strong>
         <span>{{ item.response.supplierName }} · 第 {{ item.clarification.round }} 轮</span>
         <p>{{ item.clarification.requestText }}</p>
+        <span>
+          登记回复后响应将升为第 {{ item.response.responseVersion + 1 }} 版，
+          依据旧版的未确认意见将作废。
+        </span>
       </div>
     }
     <div class="field">

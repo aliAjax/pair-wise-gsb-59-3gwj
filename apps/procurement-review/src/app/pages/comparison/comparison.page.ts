@@ -18,7 +18,9 @@ import {
 } from "../../core/models/review.models";
 import { ReviewActions } from "../../core/state/review.actions";
 import {
+  currentOpinions,
   hasReviewDifference,
+  outdatedOpinions,
   selectClauses,
   selectFilteredClauses,
   selectFilters,
@@ -146,6 +148,18 @@ export class ComparisonPage {
     return response ? hasReviewDifference(response) : false;
   }
 
+  currentOpinionCount(response: SupplierResponse | undefined): number {
+    return response ? currentOpinions(response).length : 0;
+  }
+
+  staleCount(response: SupplierResponse | undefined): number {
+    return response ? outdatedOpinions(response).length : 0;
+  }
+
+  hasStale(response: SupplierResponse | undefined): boolean {
+    return this.staleCount(response) > 0;
+  }
+
   isReusedProof(response: SupplierResponse | undefined): boolean {
     return response
       ? (this.proofCounts().get(response.proofFingerprint) ?? 0) > 1
@@ -154,5 +168,9 @@ export class ComparisonPage {
 
   hasReusedProof(clause: Clause): boolean {
     return clause.responses.some((response) => this.isReusedProof(response));
+  }
+
+  hasStaleOpinions(clause: Clause): boolean {
+    return clause.responses.some((response) => this.hasStale(response));
   }
 }
