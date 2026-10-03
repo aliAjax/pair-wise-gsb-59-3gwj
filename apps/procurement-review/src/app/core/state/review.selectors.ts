@@ -79,6 +79,19 @@ export const hasReviewDifference = (response: SupplierResponse): boolean => {
   return decisions.size > 1;
 };
 
+export const staleOpinionsOf = (
+  response: SupplierResponse,
+): SupplierResponse["reviews"] =>
+  response.reviews.filter((review) => review.status === "stale");
+
+export const hasStaleOpinions = (response: SupplierResponse): boolean =>
+  response.reviews.some((review) => review.status === "stale");
+
+export const activeOpinionsOf = (
+  response: SupplierResponse,
+): SupplierResponse["reviews"] =>
+  response.reviews.filter((review) => review.status === "active");
+
 export const findResponse = (
   clause: Clause,
   supplierId: string,
@@ -169,6 +182,20 @@ export const selectDifferences = createSelector(
       clause.responses
         .filter(hasReviewDifference)
         .map((response) => ({ clause, response })),
+    ),
+);
+
+export const selectStaleOpinionCount = createSelector(
+  selectClauses,
+  (clauses) =>
+    clauses.reduce(
+      (count, clause) =>
+        count +
+        clause.responses.reduce(
+          (sum, response) => sum + staleOpinionsOf(response).length,
+          0,
+        ),
+      0,
     ),
 );
 

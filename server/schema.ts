@@ -32,6 +32,11 @@ export const typeDefs = parse(`
     finalized
   }
 
+  enum OpinionStatus {
+    active
+    stale
+  }
+
   type Clause {
     id: ID!
     code: String!
@@ -55,6 +60,9 @@ export const typeDefs = parse(`
     score: Int!
     comment: String!
     createdAt: String!
+    baseVersion: Int!
+    confirmedVersion: Int!
+    status: OpinionStatus!
   }
 
   type Clarification {
@@ -68,6 +76,18 @@ export const typeDefs = parse(`
     dueAt: String!
     respondedAt: String
     status: ClarificationStatus!
+    baseVersion: Int!
+  }
+
+  type ResponseRevision {
+    version: Int!
+    responseText: String!
+    attachmentName: String!
+    proofFingerprint: String!
+    claimedScore: Int!
+    submittedBy: String!
+    submittedAt: String!
+    reason: String!
   }
 
   type SupplierResponse {
@@ -83,8 +103,16 @@ export const typeDefs = parse(`
     submittedBy: String!
     submittedAt: String!
     reviewRound: Int!
+    responseVersion: Int!
+    revisions: [ResponseRevision!]!
     reviews: [ReviewerOpinion!]!
     clarifications: [Clarification!]!
+  }
+
+  type ResponseVersionBasis {
+    responseId: String!
+    version: Int!
+    opinionIds: [String!]!
   }
 
   type ReviewVersion {
@@ -98,6 +126,7 @@ export const typeDefs = parse(`
     clauseCount: Int!
     responseCount: Int!
     contentHash: String!
+    basis: [ResponseVersionBasis!]!
   }
 
   type AuditLog {
@@ -116,6 +145,7 @@ export const typeDefs = parse(`
     differences: Int!
     overdueClarifications: Int!
     reusedProofs: Int!
+    staleOpinions: Int!
     activeVersion: String!
   }
 
@@ -139,6 +169,29 @@ export const typeDefs = parse(`
     comment: String!
     reviewer: String!
     role: ReviewRole!
+    baseVersion: Int!
+    operationId: ID!
+  }
+
+  input ConfirmOpinionInput {
+    opinionId: ID!
+    actor: String!
+    role: ReviewRole!
+    baseVersion: Int!
+    operationId: ID!
+  }
+
+  input ResponseRevisionInput {
+    responseId: ID!
+    responseText: String!
+    attachmentName: String!
+    proofFingerprint: String!
+    claimedScore: Int!
+    reason: String!
+    actor: String!
+    role: ReviewRole!
+    baseVersion: Int!
+    operationId: ID!
   }
 
   input ClarificationInput {
@@ -146,18 +199,23 @@ export const typeDefs = parse(`
     requestText: String!
     dueAt: String!
     actor: String!
+    baseVersion: Int!
+    operationId: ID!
   }
 
   input ClarificationResponseInput {
     clarificationId: ID!
     responseText: String!
     actor: String!
+    baseVersion: Int!
+    operationId: ID!
   }
 
   input FinalizeVersionInput {
     label: String!
     actor: String!
     role: ReviewRole!
+    operationId: ID!
   }
 
   type Query {
@@ -167,6 +225,8 @@ export const typeDefs = parse(`
 
   type Mutation {
     submitAssessment(input: AssessmentInput!): ReviewerOpinion!
+    confirmOpinion(input: ConfirmOpinionInput!): ReviewerOpinion!
+    submitResponseRevision(input: ResponseRevisionInput!): SupplierResponse!
     requestClarification(input: ClarificationInput!): Clarification!
     respondClarification(input: ClarificationResponseInput!): Clarification!
     finalizeVersion(input: FinalizeVersionInput!): ReviewVersion!

@@ -16,21 +16,28 @@ import { TableModule } from "primeng/table";
 import { TagModule } from "primeng/tag";
 import { TextareaModule } from "primeng/textarea";
 import {
+  createOperationId,
   roleProfiles,
   type Clarification,
   type Clause,
+  type ReviewVersion,
   type SupplierResponse,
 } from "../../core/models/review.models";
 import { ReviewActions } from "../../core/state/review.actions";
 import {
   hasReviewDifference,
+  hasStaleOpinions,
   selectClauses,
   selectPendingClarifications,
   selectRole,
+  selectSaving,
+  selectStaleOpinionCount,
   selectVersions,
+  staleOpinionsOf,
 } from "../../core/state/review.selectors";
 import {
   ClarificationTagComponent,
+  OpinionTagComponent,
   StatusTagComponent,
   VersionTagComponent,
 } from "../../shared/status-tag.component";
@@ -56,6 +63,7 @@ interface PendingClarification {
     ClarificationTagComponent,
     StatusTagComponent,
     VersionTagComponent,
+    OpinionTagComponent,
   ],
   templateUrl: "./review.page.html",
   styleUrl: "./review.page.scss",
@@ -73,14 +81,23 @@ export class ReviewPage {
   readonly role = toSignal(this.store.select(selectRole), {
     initialValue: "reviewer_a",
   });
+  readonly saving = toSignal(this.store.select(selectSaving), {
+    initialValue: false,
+  });
   readonly pendingClarifications = toSignal(
     this.store.select(selectPendingClarifications),
     { initialValue: [] as PendingClarification[] },
   );
+  readonly staleOpinionCount = toSignal(
+    this.store.select(selectStaleOpinionCount),
+    { initialValue: 0 },
+  );
   readonly finalizeVisible = signal(false);
   readonly responseVisible = signal(false);
   readonly selectedClarification = signal<PendingClarification | null>(null);
-  readonly canFinalize = computed(() => this.role() === "chair");
+  readonly canFinalize = computed(
+    () => this.role() === "chair" && this.staleOpinionCount() === 0,
+  );
   readonly canRespond = computed(() =>
     ["procurement", "chair"].includes(this.role()),
   );
@@ -108,13 +125,20 @@ export class ReviewPage {
     }),
   });
 
+  readonly hasStale = hasStaleOpinions;
+  readonly staleOf = staleOpinionsOf;
+
+  private readonly finalizeOperationId = signal(createOperationId());
+  private readonly respondOperationId = signal(createOperationId());
+
   openFinalize(): void {
     this.finalizeForm.reset({ label: "技术响应符合性评审汇总" });
+    this.finalizeOperationId.set(createOperationId());
     this.finalizeVisible.set(true);
   }
 
   finalizeVersion(): void {
-    if (!this.canFinalize() || this.finalizeForm.invalid) {
+    if (this.role() !== "chair" || this.finalizeForm.invalid) {
       this.finalizeForm.markAllAsTouched();
       return;
     }
@@ -124,6 +148,7 @@ export class ReviewPage {
           label: this.finalizeForm.controls.label.value,
           actor: roleProfiles[this.role()].name,
           role: this.role(),
+          operationId: this.finalizeOperationId(),
         },
       }),
     );
@@ -133,6 +158,7 @@ export class ReviewPage {
   openResponse(item: PendingClarification): void {
     this.selectedClarification.set(item);
     this.responseForm.reset({ responseText: "" });
+    this.respondOperationId.set(createOperationId());
     this.responseVisible.set(true);
   }
 
@@ -152,9 +178,25 @@ export class ReviewPage {
           clarificationId: item.clarification.id,
           responseText: this.responseForm.controls.responseText.value,
           actor: roleProfiles[this.role()].name,
+          baseVersion: item.response.responseVersion,
+          operationId: this.respondOperationId(),
         },
       }),
     );
     this.responseVisible.set(false);
+  }
+
+  basisSummary(version: ReviewVersion): string {
+    if (!version.basis.length) {
+      return "未记录依据版本";
+    }
+    const confirmed = version.basis.reduce(
+      (count, entry) => count + entry.opinionIds.length,
+      0,
+    );
+    const versions = Array.from(
+      new Set(version.basis.map((entry) => `V${entry.version}`)),
+    ).join(" / ");
+    return `${version.basis.length} 项响应（${versions}）· ${confirmed} 条已确认意见`;
   }
 }

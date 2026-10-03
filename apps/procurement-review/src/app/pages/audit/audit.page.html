@@ -23,7 +23,13 @@
       <p-button
         label="导出 CSV"
         icon="pi pi-file-export"
+        [outlined]="true"
         (onClick)="exportCsv()"
+      />
+      <p-button
+        label="导出意见结论"
+        icon="pi pi-list"
+        (onClick)="exportOpinions()"
       />
     </div>
   </header>
@@ -36,6 +42,10 @@
     <article>
       <span>已定稿版本</span>
       <strong>{{ finalizedCount() }}</strong>
+    </article>
+    <article>
+      <span>待重新确认意见</span>
+      <strong class="danger">{{ staleOpinionCount() }}</strong>
     </article>
     <article>
       <span>当前导出条数</span>

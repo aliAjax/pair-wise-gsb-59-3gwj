@@ -72,6 +72,8 @@ export const reviewReducer = createReducer(
   })),
   on(
     ReviewActions.submitAssessment,
+    ReviewActions.confirmOpinion,
+    ReviewActions.submitResponseRevision,
     ReviewActions.requestClarification,
     ReviewActions.respondClarification,
     ReviewActions.finalizeVersion,

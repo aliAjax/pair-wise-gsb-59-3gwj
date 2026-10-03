@@ -178,6 +178,11 @@ h4 {
     background: #fbfcfc;
   }
 
+  article.opinion-stale {
+    border-color: #f0c36a;
+    background: #fffaf0;
+  }
+
   header {
     display: flex;
     align-items: center;
@@ -206,6 +211,96 @@ h4 {
     color: #33565a;
     font-size: 13px;
   }
+}
+
+.revision-list {
+  display: grid;
+  gap: 8px;
+
+  article {
+    padding: 9px 11px;
+    border: 1px dashed #d3dee1;
+    border-radius: 6px;
+    background: #f7fafa;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+
+    strong {
+      color: #17706d;
+      font-size: 12px;
+    }
+
+    span {
+      color: #33565a;
+      font-size: 12px;
+    }
+
+    time {
+      margin-left: auto;
+      color: #7a898e;
+      font-size: 11px;
+    }
+  }
+
+  p {
+    margin: 6px 0 0;
+    color: #5c7076;
+    font-size: 12px;
+  }
+}
+
+.opinion-version {
+  color: #718188;
+  font-size: 11px;
+}
+
+.opinion-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed #f0c36a;
+
+  span {
+    color: #8a5a00;
+    font-size: 12px;
+  }
+}
+
+.version-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px solid #f0c36a;
+  border-radius: 6px;
+  background: #fff8e8;
+  color: #744600;
+  font-size: 13px;
+}
+
+.revision-note {
+  padding: 10px 12px;
+  border-left: 3px solid #17706d;
+  background: #edf6f5;
+  color: #274f4b;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.tab-tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .review-form {

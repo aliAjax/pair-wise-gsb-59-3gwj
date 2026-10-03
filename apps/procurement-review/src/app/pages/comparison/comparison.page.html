@@ -15,6 +15,12 @@
         (onClick)="updateFilter({ differencesOnly: true })"
       />
       <p-button
+        label="待重新确认 {{ staleOpinionCount() }} 条"
+        icon="pi pi-sync"
+        severity="warn"
+        [outlined]="true"
+      />
+      <p-button
         label="重复证明 {{ reusedProofCount() }} 组"
         icon="pi pi-copy"
         severity="secondary"
@@ -137,7 +143,12 @@
             >
               @if (response) {
                 <div class="cell-stack">
-                  <app-status-tag [status]="response.status" />
+                  <div class="cell-tags">
+                    <app-status-tag [status]="response.status" />
+                    <span class="response-version">
+                      V{{ response.responseVersion }}
+                    </span>
+                  </div>
                   @if (clause.type === "scoring") {
                     <strong class="score">{{ response.claimedScore }} 分</strong>
                   }
@@ -145,6 +156,12 @@
                     {{ response.attachmentName }}
                   </span>
                   <small>{{ response.reviews.length }} 条独立意见</small>
+                  @if (hasStale(response)) {
+                    <span class="stale-cell-note">
+                      <i class="pi pi-sync"></i>
+                      {{ staleCount(response) }} 条意见待重新确认
+                    </span>
+                  }
                 </div>
               } @else {
                 <span class="muted">无响应</span>
@@ -154,10 +171,17 @@
           <td class="risk-cell">
             @let hasAnyDifference = clause.responses.some(hasDifference);
             @let hasAnyReuse = hasReusedProof(clause);
+            @let hasAnyStale = clauseHasStale(clause);
             @if (hasAnyDifference) {
               <span class="risk-item warn">
                 <i class="pi pi-exclamation-circle"></i>
                 评审意见分歧
+              </span>
+            }
+            @if (hasAnyStale) {
+              <span class="risk-item warn">
+                <i class="pi pi-sync"></i>
+                意见待重新确认
               </span>
             }
             @if (hasAnyReuse) {
@@ -166,7 +190,7 @@
                 证明重复使用
               </span>
             }
-            @if (!hasAnyDifference && !hasAnyReuse) {
+            @if (!hasAnyDifference && !hasAnyReuse && !hasAnyStale) {
               <span class="muted">未发现冲突</span>
             }
           </td>

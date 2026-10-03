@@ -11,6 +11,7 @@ export type ReviewRole =
   | "chair";
 export type ClarificationStatus = "open" | "responded" | "overdue";
 export type VersionStatus = "draft" | "finalized";
+export type OpinionStatus = "active" | "stale";
 
 export interface ReviewerOpinion {
   id: string;
@@ -21,6 +22,9 @@ export interface ReviewerOpinion {
   score: number;
   comment: string;
   createdAt: string;
+  baseVersion: number;
+  confirmedVersion: number;
+  status: OpinionStatus;
 }
 
 export interface Clarification {
@@ -34,6 +38,18 @@ export interface Clarification {
   dueAt: string;
   respondedAt?: string;
   status: ClarificationStatus;
+  baseVersion: number;
+}
+
+export interface ResponseRevision {
+  version: number;
+  responseText: string;
+  attachmentName: string;
+  proofFingerprint: string;
+  claimedScore: number;
+  submittedBy: string;
+  submittedAt: string;
+  reason: string;
 }
 
 export interface SupplierResponse {
@@ -49,6 +65,8 @@ export interface SupplierResponse {
   submittedBy: string;
   submittedAt: string;
   reviewRound: number;
+  responseVersion: number;
+  revisions: ResponseRevision[];
   reviews: ReviewerOpinion[];
   clarifications: Clarification[];
 }
@@ -72,6 +90,12 @@ export interface ClauseTreeNode extends Clause {
   children: ClauseTreeNode[];
 }
 
+export interface ResponseVersionBasis {
+  responseId: string;
+  version: number;
+  opinionIds: string[];
+}
+
 export interface ReviewVersion {
   id: string;
   version: string;
@@ -83,6 +107,7 @@ export interface ReviewVersion {
   clauseCount: number;
   responseCount: number;
   contentHash: string;
+  basis: ResponseVersionBasis[];
 }
 
 export interface AuditLog {
@@ -101,6 +126,7 @@ export interface DashboardStats {
   differences: number;
   overdueClarifications: number;
   reusedProofs: number;
+  staleOpinions: number;
   activeVersion: string;
 }
 
@@ -148,6 +174,29 @@ export interface AssessmentInput {
   comment: string;
   reviewer: string;
   role: ReviewRole;
+  baseVersion: number;
+  operationId: string;
+}
+
+export interface ConfirmOpinionInput {
+  opinionId: string;
+  actor: string;
+  role: ReviewRole;
+  baseVersion: number;
+  operationId: string;
+}
+
+export interface ResponseRevisionInput {
+  responseId: string;
+  responseText: string;
+  attachmentName: string;
+  proofFingerprint: string;
+  claimedScore: number;
+  reason: string;
+  actor: string;
+  role: ReviewRole;
+  baseVersion: number;
+  operationId: string;
 }
 
 export interface ClarificationInput {
@@ -155,18 +204,23 @@ export interface ClarificationInput {
   requestText: string;
   dueAt: string;
   actor: string;
+  baseVersion: number;
+  operationId: string;
 }
 
 export interface ClarificationResponseInput {
   clarificationId: string;
   responseText: string;
   actor: string;
+  baseVersion: number;
+  operationId: string;
 }
 
 export interface FinalizeVersionInput {
   label: string;
   actor: string;
   role: ReviewRole;
+  operationId: string;
 }
 
 export const roleProfiles: Record<ReviewRole, { name: string; label: string }> = {
@@ -195,3 +249,13 @@ export const statusSeverity: Record<ComplianceStatus, string> = {
   clarification: "warn",
   pending: "secondary",
 };
+
+export const opinionStatusLabels: Record<OpinionStatus, string> = {
+  active: "有效",
+  stale: "待重新确认",
+};
+
+export const createOperationId = (): string =>
+  typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `OP-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;

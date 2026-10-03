@@ -4,7 +4,9 @@ import type {
   ClauseFilters,
   ClarificationInput,
   ClarificationResponseInput,
+  ConfirmOpinionInput,
   FinalizeVersionInput,
+  ResponseRevisionInput,
   ReviewRole,
   ReviewState,
 } from "../models/review.models";
@@ -26,6 +28,8 @@ export const ReviewActions = createActionGroup({
     "Toggle Supplier": props<{ supplierId: string }>(),
     "Clear Toast": emptyProps(),
     "Submit Assessment": props<{ input: AssessmentInput }>(),
+    "Confirm Opinion": props<{ input: ConfirmOpinionInput }>(),
+    "Submit Response Revision": props<{ input: ResponseRevisionInput }>(),
     "Request Clarification": props<{ input: ClarificationInput }>(),
     "Respond Clarification": props<{ input: ClarificationResponseInput }>(),
     "Finalize Version": props<{ input: FinalizeVersionInput }>(),

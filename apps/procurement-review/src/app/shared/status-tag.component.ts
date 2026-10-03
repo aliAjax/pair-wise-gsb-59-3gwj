@@ -4,6 +4,7 @@ import type {
   ClauseType,
   ClarificationStatus,
   ComplianceStatus,
+  OpinionStatus,
   VersionStatus,
 } from "../core/models/review.models";
 
@@ -49,6 +50,14 @@ const versionConfig: Record<
 > = {
   draft: { label: "工作版", severity: "warn" },
   finalized: { label: "已定稿", severity: "success" },
+};
+
+const opinionConfig: Record<
+  OpinionStatus,
+  { label: string; severity: Severity }
+> = {
+  active: { label: "有效", severity: "success" },
+  stale: { label: "待重新确认", severity: "warn" },
 };
 
 @Component({
@@ -120,5 +129,23 @@ export class VersionTagComponent {
 
   severity(): Severity {
     return versionConfig[this.status()].severity;
+  }
+}
+
+@Component({
+  selector: "app-opinion-tag",
+  imports: [TagModule],
+  template: `<p-tag [value]="label()" [severity]="severity()" />`,
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class OpinionTagComponent {
+  readonly status = input<OpinionStatus>("active");
+
+  label(): string {
+    return opinionConfig[this.status()].label;
+  }
+
+  severity(): Severity {
+    return opinionConfig[this.status()].severity;
   }
 }

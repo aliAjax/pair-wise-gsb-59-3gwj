@@ -6,9 +6,12 @@ import type {
   Clarification,
   ClarificationInput,
   ClarificationResponseInput,
+  ConfirmOpinionInput,
   FinalizeVersionInput,
+  ResponseRevisionInput,
   ReviewVersion,
   ReviewerOpinion,
+  SupplierResponse,
   WorkspaceQueryResult,
 } from "../models/review.models";
 
@@ -39,6 +42,17 @@ const WORKSPACE_QUERY = gql`
           submittedBy
           submittedAt
           reviewRound
+          responseVersion
+          revisions {
+            version
+            responseText
+            attachmentName
+            proofFingerprint
+            claimedScore
+            submittedBy
+            submittedAt
+            reason
+          }
           reviews {
             id
             responseId
@@ -48,6 +62,9 @@ const WORKSPACE_QUERY = gql`
             score
             comment
             createdAt
+            baseVersion
+            confirmedVersion
+            status
           }
           clarifications {
             id
@@ -60,6 +77,7 @@ const WORKSPACE_QUERY = gql`
             dueAt
             respondedAt
             status
+            baseVersion
           }
         }
       }
@@ -74,6 +92,11 @@ const WORKSPACE_QUERY = gql`
         clauseCount
         responseCount
         contentHash
+        basis {
+          responseId
+          version
+          opinionIds
+        }
       }
       auditLogs {
         id
@@ -90,6 +113,7 @@ const WORKSPACE_QUERY = gql`
         differences
         overdueClarifications
         reusedProofs
+        staleOpinions
         activeVersion
       }
       suppliers {
@@ -111,6 +135,57 @@ const SUBMIT_ASSESSMENT = gql`
       score
       comment
       createdAt
+      baseVersion
+      confirmedVersion
+      status
+    }
+  }
+`;
+
+const CONFIRM_OPINION = gql`
+  mutation ConfirmOpinion($input: ConfirmOpinionInput!) {
+    confirmOpinion(input: $input) {
+      id
+      responseId
+      reviewer
+      role
+      decision
+      score
+      comment
+      createdAt
+      baseVersion
+      confirmedVersion
+      status
+    }
+  }
+`;
+
+const SUBMIT_RESPONSE_REVISION = gql`
+  mutation SubmitResponseRevision($input: ResponseRevisionInput!) {
+    submitResponseRevision(input: $input) {
+      id
+      clauseId
+      supplierId
+      supplierName
+      status
+      responseText
+      claimedScore
+      attachmentName
+      proofFingerprint
+      submittedBy
+      submittedAt
+      reviewRound
+      responseVersion
+      revisions {
+        version
+        responseText
+        attachmentName
+        proofFingerprint
+        claimedScore
+        submittedBy
+        submittedAt
+        reason
+      }
     }
   }
 `;
@@ -128,6 +203,7 @@ const REQUEST_CLARIFICATION = gql`
       dueAt
       respondedAt
       status
+      baseVersion
     }
   }
 `;
@@ -145,6 +221,7 @@ const RESPOND_CLARIFICATION = gql`
       dueAt
       respondedAt
       status
+      baseVersion
     }
   }
 `;
@@ -162,6 +239,11 @@ const FINALIZE_VERSION = gql`
       clauseCount
       responseCount
       contentHash
+      basis {
+        responseId
+        version
+        opinionIds
+      }
     }
   }
 `;
@@ -205,6 +287,42 @@ export class ReviewGraphqlService {
             throw new Error("GraphQL 未返回评审意见。");
           }
           return result.data.submitAssessment;
+        }),
+      );
+  }
+
+  confirmOpinion(input: ConfirmOpinionInput): Observable<ReviewerOpinion> {
+    return this.apollo
+      .mutate<{ confirmOpinion: ReviewerOpinion }>({
+        mutation: CONFIRM_OPINION,
+        variables: { input },
+        refetchQueries: ["ProcurementReviewWorkspace"],
+      })
+      .pipe(
+        map((result) => {
+          if (!result.data) {
+            throw new Error("GraphQL 未返回确认结果。");
+          }
+          return result.data.confirmOpinion;
+        }),
+      );
+  }
+
+  submitResponseRevision(
+    input: ResponseRevisionInput,
+  ): Observable<SupplierResponse> {
+    return this.apollo
+      .mutate<{ submitResponseRevision: SupplierResponse }>({
+        mutation: SUBMIT_RESPONSE_REVISION,
+        variables: { input },
+        refetchQueries: ["ProcurementReviewWorkspace"],
+      })
+      .pipe(
+        map((result) => {
+          if (!result.data) {
+            throw new Error("GraphQL 未返回补交后的响应。");
+          }
+          return result.data.submitResponseRevision;
         }),
       );
   }

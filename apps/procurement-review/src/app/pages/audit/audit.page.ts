@@ -10,10 +10,16 @@ import { TableModule } from "primeng/table";
 import { ReviewActions } from "../../core/state/review.actions";
 import {
   selectAuditLogs,
+  selectClauses,
   selectRole,
+  selectStaleOpinionCount,
   selectVersions,
 } from "../../core/state/review.selectors";
-import { roleProfiles } from "../../core/models/review.models";
+import {
+  complianceLabels,
+  opinionStatusLabels,
+  roleProfiles,
+} from "../../core/models/review.models";
 
 @Component({
   selector: "app-audit-page",
@@ -39,9 +45,16 @@ export class AuditPage {
   readonly versions = toSignal(this.store.select(selectVersions), {
     initialValue: [],
   });
+  readonly clauses = toSignal(this.store.select(selectClauses), {
+    initialValue: [],
+  });
   readonly role = toSignal(this.store.select(selectRole), {
     initialValue: "reviewer_a",
   });
+  readonly staleOpinionCount = toSignal(
+    this.store.select(selectStaleOpinionCount),
+    { initialValue: 0 },
+  );
   readonly keyword = signal("");
   readonly action = signal("all");
   readonly actionOptions = computed(() => [
@@ -95,6 +108,49 @@ export class AuditPage {
       .join("\n");
     this.download(
       "procurement-review-audit.csv",
+      csv,
+      "text/csv;charset=utf-8",
+    );
+  }
+
+  exportOpinions(): void {
+    const header = [
+      "条款",
+      "供应商",
+      "响应版本",
+      "评审员",
+      "结论",
+      "评分",
+      "意见状态",
+      "基于版本",
+      "确认版本",
+      "提交时间",
+      "意见内容",
+    ];
+    const rows = this.clauses().flatMap((clause) =>
+      clause.responses.flatMap((response) =>
+        response.reviews.map((review) => [
+          `${clause.code} ${clause.title}`,
+          response.supplierName,
+          `V${response.responseVersion}`,
+          review.reviewer,
+          complianceLabels[review.decision],
+          String(review.score),
+          opinionStatusLabels[review.status],
+          `V${review.baseVersion}`,
+          `V${review.confirmedVersion}`,
+          review.createdAt,
+          review.comment,
+        ]),
+      ),
+    );
+    const csv = [header, ...rows]
+      .map((row) =>
+        row.map((value) => `"${value.replaceAll('"', '""')}"`).join(","),
+      )
+      .join("\n");
+    this.download(
+      "procurement-review-opinions.csv",
       csv,
       "text/csv;charset=utf-8",
     );

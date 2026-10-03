@@ -19,11 +19,13 @@ import {
 import { ReviewActions } from "../../core/state/review.actions";
 import {
   hasReviewDifference,
+  hasStaleOpinions,
   selectClauses,
   selectFilteredClauses,
   selectFilters,
   selectSelectedSupplierIds,
   selectSuppliers,
+  staleOpinionsOf,
 } from "../../core/state/review.selectors";
 import {
   ClauseTypeTagComponent,
@@ -109,6 +111,12 @@ export class ComparisonPage {
         hasReviewDifference,
       ).length,
   );
+  readonly staleOpinionCount = computed(
+    () =>
+      this.clauses()
+        .flatMap((clause) => clause.responses)
+        .reduce((count, response) => count + staleOpinionsOf(response).length, 0),
+  );
   readonly reusedProofCount = computed(
     () =>
       Array.from(this.proofCounts().values()).filter((count) => count > 1)
@@ -144,6 +152,18 @@ export class ComparisonPage {
 
   hasDifference(response: SupplierResponse | undefined): boolean {
     return response ? hasReviewDifference(response) : false;
+  }
+
+  hasStale(response: SupplierResponse | undefined): boolean {
+    return response ? hasStaleOpinions(response) : false;
+  }
+
+  staleCount(response: SupplierResponse | undefined): number {
+    return response ? staleOpinionsOf(response).length : 0;
+  }
+
+  clauseHasStale(clause: Clause): boolean {
+    return clause.responses.some((response) => hasStaleOpinions(response));
   }
 
   isReusedProof(response: SupplierResponse | undefined): boolean {

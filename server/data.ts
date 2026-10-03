@@ -5,6 +5,7 @@ import type {
   Clarification,
   Clause,
   ComplianceStatus,
+  OpinionStatus,
   ReviewDatabase,
   ReviewRole,
   ReviewerOpinion,
@@ -225,6 +226,7 @@ const reviewFactories: Array<{
   score: number;
   comment: string;
   createdAt: string;
+  status?: OpinionStatus;
 }> = [
   {
     responseId: "C002-SUP-A",
@@ -270,6 +272,7 @@ const reviewFactories: Array<{
     score: 21,
     comment: "架构分层清晰，现有系统适配路径可验证。",
     createdAt: "2026-09-28T13:15:00+08:00",
+    status: "stale",
   },
   {
     responseId: "C004-SUP-B",
@@ -279,6 +282,7 @@ const reviewFactories: Array<{
     score: 15,
     comment: "高可用部署缺少跨机房切换演练记录。",
     createdAt: "2026-09-28T14:02:00+08:00",
+    status: "stale",
   },
 ];
 
@@ -292,6 +296,7 @@ const clarifications: Clarification[] = [
     requestedAt: "2026-09-27T09:00:00+08:00",
     dueAt: "2026-09-28T18:00:00+08:00",
     status: "overdue",
+    baseVersion: 1,
   },
   {
     id: "CL-002",
@@ -302,6 +307,7 @@ const clarifications: Clarification[] = [
     requestedAt: "2026-09-28T14:30:00+08:00",
     dueAt: "2026-10-02T18:00:00+08:00",
     status: "open",
+    baseVersion: 1,
   },
   {
     id: "CL-003",
@@ -314,6 +320,7 @@ const clarifications: Clarification[] = [
     dueAt: "2026-09-28T18:00:00+08:00",
     respondedAt: "2026-09-27T14:20:00+08:00",
     status: "responded",
+    baseVersion: 1,
   },
 ];
 
@@ -332,24 +339,43 @@ const makeResponse = (
     Math.round(maxScore * 0.64),
   ];
   const override = responseOverrides[id] ?? {};
+  const responseText =
+    clause.type === "mandatory"
+      ? `${supplier.name}已按采购要求提交说明与支持材料。`
+      : `${supplier.name}提交响应正文，并声明可满足条款要求，分值依据需评审员复核。`;
+  const claimedScore = override.claimedScore ?? scorePattern[supplierIndex] ?? 0;
+  const attachmentName =
+    override.attachmentName ?? `${supplier.name}-${clause.code}-证明材料.pdf`;
+  const proofFingerprint =
+    override.proofFingerprint ?? `PROOF-${clause.id}-${supplier.id}`;
+  const submittedBy = `${supplier.name}投标专员`;
+  const submittedAt = `2026-09-${String(22 + ((clauseIndex + supplierIndex) % 4)).padStart(2, "0")}T16:20:00+08:00`;
   const base: SupplierResponse = {
     id,
     clauseId: clause.id,
     supplierId: supplier.id,
     supplierName: supplier.name,
     status: override.status ?? defaultStatus,
-    responseText:
-      clause.type === "mandatory"
-        ? `${supplier.name}已按采购要求提交说明与支持材料。`
-        : `${supplier.name}提交响应正文，并声明可满足条款要求，分值依据需评审员复核。`,
-    claimedScore: override.claimedScore ?? scorePattern[supplierIndex] ?? 0,
-    attachmentName:
-      override.attachmentName ?? `${supplier.name}-${clause.code}-证明材料.pdf`,
-    proofFingerprint:
-      override.proofFingerprint ?? `PROOF-${clause.id}-${supplier.id}`,
-    submittedBy: `${supplier.name}投标专员`,
-    submittedAt: `2026-09-${String(22 + ((clauseIndex + supplierIndex) % 4)).padStart(2, "0")}T16:20:00+08:00`,
+    responseText,
+    claimedScore,
+    attachmentName,
+    proofFingerprint,
+    submittedBy,
+    submittedAt,
     reviewRound: 1,
+    responseVersion: 1,
+    revisions: [
+      {
+        version: 1,
+        responseText,
+        attachmentName,
+        proofFingerprint,
+        claimedScore,
+        submittedBy,
+        submittedAt,
+        reason: "首次提交",
+      },
+    ],
     reviews: [],
     clarifications: [],
   };
@@ -357,7 +383,16 @@ const makeResponse = (
     .filter((item) => item.responseId === id)
     .map((item, index) => ({
       id: `OP-${id}-${index + 1}`,
-      ...item,
+      responseId: item.responseId,
+      reviewer: item.reviewer,
+      role: item.role,
+      decision: item.decision,
+      score: item.score,
+      comment: item.comment,
+      createdAt: item.createdAt,
+      baseVersion: 1,
+      confirmedVersion: 1,
+      status: item.status ?? "active",
     }));
   base.clarifications = clarifications.filter((item) => item.responseId === id);
   return base;
@@ -368,6 +403,76 @@ const responses: SupplierResponse[] = clauses.flatMap((clause, clauseIndex) =>
     makeResponse(clause, supplierIndex, clauseIndex),
   ),
 );
+
+const seedResponseRevision = (
+  responseId: string,
+  revision: {
+    responseText?: string;
+    attachmentName?: string;
+    proofFingerprint?: string;
+    claimedScore?: number;
+    submittedBy: string;
+    submittedAt: string;
+    reason: string;
+  },
+): void => {
+  const response = responses.find((item) => item.id === responseId);
+  if (!response) {
+    return;
+  }
+  const nextVersion = response.responseVersion + 1;
+  response.responseText = revision.responseText ?? response.responseText;
+  response.attachmentName = revision.attachmentName ?? response.attachmentName;
+  response.proofFingerprint =
+    revision.proofFingerprint ?? response.proofFingerprint;
+  response.claimedScore = revision.claimedScore ?? response.claimedScore;
+  response.submittedBy = revision.submittedBy;
+  response.submittedAt = revision.submittedAt;
+  response.responseVersion = nextVersion;
+  response.revisions.push({
+    version: nextVersion,
+    responseText: response.responseText,
+    attachmentName: response.attachmentName,
+    proofFingerprint: response.proofFingerprint,
+    claimedScore: response.claimedScore,
+    submittedBy: revision.submittedBy,
+    submittedAt: revision.submittedAt,
+    reason: revision.reason,
+  });
+  response.reviews.forEach((review) => {
+    if (review.status === "active") {
+      review.status = "stale";
+    }
+  });
+};
+
+// 北辰信息在评审期间补交架构演练材料，原有独立意见随之作废待重新确认。
+seedResponseRevision("C004-SUP-B", {
+  responseText:
+    "北辰信息提交响应正文，并补充跨机房高可用切换演练记录与互操作验证截图。",
+  attachmentName: "高可用切换演练记录.pdf",
+  submittedBy: "北辰信息投标专员",
+  submittedAt: "2026-09-29T09:40:00+08:00",
+  reason: "供应商补交跨机房切换演练记录",
+});
+
+// 南岭科技第 2 轮澄清回复登记后，响应内容进入新版本。
+seedResponseRevision("C009-SUP-C", {
+  submittedBy: "南岭科技投标专员",
+  submittedAt: "2026-09-27T14:20:00+08:00",
+  reason: "第 2 轮澄清回复",
+});
+
+const buildBasis = (includeOpinions: boolean) =>
+  responses.map((response) => ({
+    responseId: response.id,
+    version: response.responseVersion,
+    opinionIds: includeOpinions
+      ? response.reviews
+          .filter((review) => review.status === "active")
+          .map((review) => review.id)
+      : [],
+  }));
 
 const versions = [
   {
@@ -381,6 +486,7 @@ const versions = [
     clauseCount: clauses.length,
     responseCount: responses.length,
     contentHash: "a84f2d17",
+    basis: buildBasis(false),
   },
   {
     id: "VER-002",
@@ -393,6 +499,7 @@ const versions = [
     clauseCount: clauses.length,
     responseCount: responses.length,
     contentHash: "d91c6b42",
+    basis: [],
   },
 ];
 
@@ -429,6 +536,15 @@ const auditLogs: AuditLog[] = [
     entity: "VER-002",
     detail: "创建 V2 工作版本，保留 V1 定稿快照。",
   },
+  {
+    id: "AUD-005",
+    at: "2026-09-29T09:40:00+08:00",
+    actor: "采购专员",
+    action: "登记补交",
+    entity: "C004-SUP-B",
+    detail:
+      "北辰信息补交跨机房切换演练记录，响应更新至 V2，2 条独立意见待重新确认。",
+  },
 ];
 
 const buildSeed = (): ReviewDatabase => ({
@@ -437,7 +553,23 @@ const buildSeed = (): ReviewDatabase => ({
   versions: structuredClone(versions),
   auditLogs: structuredClone(auditLogs),
   suppliers: structuredClone(suppliers),
+  operations: [],
 });
+
+const isCurrentShape = (data: ReviewDatabase): boolean =>
+  Array.isArray(data.operations) &&
+  Array.isArray(data.responses) &&
+  data.responses.every(
+    (response) =>
+      typeof response.responseVersion === "number" &&
+      Array.isArray(response.revisions) &&
+      response.reviews.every(
+        (review) =>
+          typeof review.baseVersion === "number" &&
+          typeof review.confirmedVersion === "number" &&
+          (review.status === "active" || review.status === "stale"),
+      ),
+  );
 
 class ReviewDataStore {
   private readonly runtimePath = join(process.cwd(), "server", "runtime-data.json");
@@ -446,9 +578,10 @@ class ReviewDataStore {
   constructor() {
     if (existsSync(this.runtimePath)) {
       try {
-        this.data = JSON.parse(
+        const loaded = JSON.parse(
           readFileSync(this.runtimePath, "utf8"),
         ) as ReviewDatabase;
+        this.data = isCurrentShape(loaded) ? loaded : buildSeed();
       } catch {
         this.data = buildSeed();
       }
@@ -463,13 +596,17 @@ class ReviewDataStore {
 
   mutate<T>(work: (database: ReviewDatabase) => T): T {
     const result = work(this.data);
-    writeFileSync(this.runtimePath, JSON.stringify(this.data, null, 2), "utf8");
+    this.persist();
     return result;
+  }
+
+  persist(): void {
+    writeFileSync(this.runtimePath, JSON.stringify(this.data, null, 2), "utf8");
   }
 
   reset(): ReviewDatabase {
     this.data = buildSeed();
-    writeFileSync(this.runtimePath, JSON.stringify(this.data, null, 2), "utf8");
+    this.persist();
     return this.snapshot();
   }
 }
@@ -498,3 +635,6 @@ export const createOpinionId = (): string =>
 
 export const createClarificationId = (): string =>
   `CL-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+
+export const createVersionId = (): string =>
+  `VER-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;

@@ -11,6 +11,7 @@ export type ReviewRole =
   | "chair";
 export type ClarificationStatus = "open" | "responded" | "overdue";
 export type VersionStatus = "draft" | "finalized";
+export type OpinionStatus = "active" | "stale";
 
 export interface Clause {
   id: string;
@@ -34,6 +35,9 @@ export interface ReviewerOpinion {
   score: number;
   comment: string;
   createdAt: string;
+  baseVersion: number;
+  confirmedVersion: number;
+  status: OpinionStatus;
 }
 
 export interface Clarification {
@@ -47,6 +51,18 @@ export interface Clarification {
   dueAt: string;
   respondedAt?: string;
   status: ClarificationStatus;
+  baseVersion: number;
+}
+
+export interface ResponseRevision {
+  version: number;
+  responseText: string;
+  attachmentName: string;
+  proofFingerprint: string;
+  claimedScore: number;
+  submittedBy: string;
+  submittedAt: string;
+  reason: string;
 }
 
 export interface SupplierResponse {
@@ -62,8 +78,16 @@ export interface SupplierResponse {
   submittedBy: string;
   submittedAt: string;
   reviewRound: number;
+  responseVersion: number;
+  revisions: ResponseRevision[];
   reviews: ReviewerOpinion[];
   clarifications: Clarification[];
+}
+
+export interface ResponseVersionBasis {
+  responseId: string;
+  version: number;
+  opinionIds: string[];
 }
 
 export interface ReviewVersion {
@@ -77,6 +101,7 @@ export interface ReviewVersion {
   clauseCount: number;
   responseCount: number;
   contentHash: string;
+  basis: ResponseVersionBasis[];
 }
 
 export interface AuditLog {
@@ -88,6 +113,16 @@ export interface AuditLog {
   detail: string;
 }
 
+export interface AppliedOperation {
+  operationId: string;
+  mutation: string;
+  payloadHash: string;
+  outcome: "applied" | "rejected";
+  entityId?: string;
+  error?: string;
+  at: string;
+}
+
 export interface DashboardStats {
   totalClauses: number;
   mandatoryCount: number;
@@ -95,6 +130,7 @@ export interface DashboardStats {
   differences: number;
   overdueClarifications: number;
   reusedProofs: number;
+  staleOpinions: number;
   activeVersion: string;
 }
 
@@ -104,6 +140,7 @@ export interface ReviewDatabase {
   versions: ReviewVersion[];
   auditLogs: AuditLog[];
   suppliers: Array<{ id: string; name: string }>;
+  operations: AppliedOperation[];
 }
 
 export interface AssessmentInput {
@@ -113,6 +150,29 @@ export interface AssessmentInput {
   comment: string;
   reviewer: string;
   role: ReviewRole;
+  baseVersion: number;
+  operationId: string;
+}
+
+export interface ConfirmOpinionInput {
+  opinionId: string;
+  actor: string;
+  role: ReviewRole;
+  baseVersion: number;
+  operationId: string;
+}
+
+export interface ResponseRevisionInput {
+  responseId: string;
+  responseText: string;
+  attachmentName: string;
+  proofFingerprint: string;
+  claimedScore: number;
+  reason: string;
+  actor: string;
+  role: ReviewRole;
+  baseVersion: number;
+  operationId: string;
 }
 
 export interface ClarificationInput {
@@ -120,16 +180,21 @@ export interface ClarificationInput {
   requestText: string;
   dueAt: string;
   actor: string;
+  baseVersion: number;
+  operationId: string;
 }
 
 export interface ClarificationResponseInput {
   clarificationId: string;
   responseText: string;
   actor: string;
+  baseVersion: number;
+  operationId: string;
 }
 
 export interface FinalizeVersionInput {
   label: string;
   actor: string;
   role: ReviewRole;
+  operationId: string;
 }

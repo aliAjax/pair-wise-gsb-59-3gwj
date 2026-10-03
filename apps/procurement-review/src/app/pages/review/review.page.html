@@ -3,15 +3,22 @@
     <div>
       <h2>评审版本与小组复核</h2>
       <p>
-        保留每位评审员的独立意见；分歧进入小组复核，已定稿版本不可覆盖。
+        保留每位评审员的独立意见；分歧进入小组复核，定稿只收录当前响应版本已重新确认的意见。
       </p>
     </div>
-    <p-button
-      label="汇总签字定稿"
-      icon="pi pi-verified"
-      [disabled]="!canFinalize()"
-      (onClick)="openFinalize()"
-    />
+    <div class="finalize-action">
+      <p-button
+        label="汇总签字定稿"
+        icon="pi pi-verified"
+        [disabled]="!canFinalize()"
+        (onClick)="openFinalize()"
+      />
+      @if (role() === "chair" && staleOpinionCount() > 0) {
+        <small class="finalize-hint">
+          仍有 {{ staleOpinionCount() }} 条意见待重新确认，不能定稿
+        </small>
+      }
+    </div>
   </header>
 
   <div class="version-summary">
@@ -22,6 +29,10 @@
     <article>
       <span>已定稿版本</span>
       <strong>{{ finalizedCount() }}</strong>
+    </article>
+    <article>
+      <span>待重新确认意见</span>
+      <strong class="danger">{{ staleOpinionCount() }}</strong>
     </article>
     <article>
       <span>待小组复核分歧</span>
@@ -38,7 +49,7 @@
       <div class="data-panel-header">
         <div>
           <h3>版本历史</h3>
-          <p>定稿版本保存内容哈希和签署人</p>
+          <p>定稿版本保存内容哈希、签署人和依据响应版本快照</p>
         </div>
       </div>
       <p-table [value]="versions()" responsiveLayout="scroll">
@@ -48,6 +59,7 @@
             <th>名称</th>
             <th>状态</th>
             <th>响应项</th>
+            <th>依据版本快照</th>
             <th>内容哈希</th>
             <th>创建信息</th>
           </tr>
@@ -68,6 +80,9 @@
               <div class="table-secondary">
                 {{ version.clauseCount }} 条条款
               </div>
+            </td>
+            <td>
+              <span class="table-secondary">{{ basisSummary(version) }}</span>
             </td>
             <td class="mono">{{ version.contentHash }}</td>
             <td>
@@ -101,7 +116,12 @@
               <strong>
                 {{ item.clause.code }} {{ item.clause.title }}
               </strong>
-              <small>{{ item.response.supplierName }} · 第 {{ item.clarification.round }} 轮</small>
+              <small>
+                {{ item.response.supplierName }} · 第
+                {{ item.clarification.round }} 轮 · 基于响应 V{{
+                  item.clarification.baseVersion
+                }}
+              </small>
               <p>{{ item.clarification.requestText }}</p>
               <time>
                 截止 {{ item.clarification.dueAt | date: "yyyy-MM-dd HH:mm" }}
@@ -151,7 +171,17 @@
           </td>
           <td>
             {{ item.response.supplierName }}
-            <div class="table-secondary">{{ item.response.id }}</div>
+            <div class="table-secondary">
+              {{ item.response.id }} · 响应 V{{ item.response.responseVersion }}
+            </div>
+            @if (hasStale(item.response)) {
+              <div class="stale-note">
+                {{ staleOf(item.response).length }} 条意见待按 V{{
+                  item.response.responseVersion
+                }}
+                重新确认
+              </div>
+            }
           </td>
           <td>
             <div class="opinion-grid">
@@ -160,7 +190,15 @@
                   <strong>{{ review.reviewer }}</strong>
                   <app-status-tag [status]="review.decision" />
                   <span>{{ review.score }} 分</span>
+                  @if (review.status === "stale") {
+                    <app-opinion-tag [status]="review.status" />
+                  }
                   <p>{{ review.comment }}</p>
+                  <small class="opinion-basis">
+                    基于 V{{ review.baseVersion }} · 确认于 V{{
+                      review.confirmedVersion
+                    }}
+                  </small>
                 </div>
               }
             </div>
@@ -194,7 +232,8 @@
       />
     </div>
     <div class="finalize-note">
-      定稿前系统会检查未完成澄清。定稿后当前版本会生成内容哈希并锁定签署人。
+      定稿前系统会检查未完成澄清和待重新确认意见。定稿只收录当前响应版本已重新确认的意见，
+      并记录每项响应的依据版本快照、内容哈希和签署人。
     </div>
     <div class="inline-actions dialog-actions">
       <p-button
@@ -207,7 +246,7 @@
         type="submit"
         label="签字并锁定"
         icon="pi pi-lock"
-        [disabled]="finalizeForm.invalid"
+        [disabled]="finalizeForm.invalid || saving()"
       />
     </div>
   </form>
@@ -224,8 +263,15 @@
     @if (selectedClarification(); as item) {
       <div class="response-context">
         <strong>{{ item.clause.code }} {{ item.clause.title }}</strong>
-        <span>{{ item.response.supplierName }} · 第 {{ item.clarification.round }} 轮</span>
+        <span>
+          {{ item.response.supplierName }} · 第 {{ item.clarification.round }} 轮
+          · 当前响应 V{{ item.response.responseVersion }}
+        </span>
         <p>{{ item.clarification.requestText }}</p>
+      </div>
+      <div class="finalize-note">
+        登记回复后响应将更新至 V{{ item.response.responseVersion + 1 }}，
+        该响应上未重新确认的旧意见会作废，需评审员按新版本重新确认。
       </div>
     }
     <div class="field">
@@ -249,7 +295,7 @@
         type="submit"
         label="保存回复"
         icon="pi pi-check"
-        [disabled]="responseForm.invalid"
+        [disabled]="responseForm.invalid || saving()"
       />
     </div>
   </form>

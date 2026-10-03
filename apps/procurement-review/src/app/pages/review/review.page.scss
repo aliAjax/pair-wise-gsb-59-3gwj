@@ -1,6 +1,6 @@
 .version-summary {
   display: grid;
-  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  grid-template-columns: repeat(5, minmax(150px, 1fr));
   gap: 12px;
   margin-bottom: 16px;
 
@@ -129,6 +129,29 @@
 .dialog-actions {
   justify-content: flex-end;
   margin-top: 18px;
+}
+
+.finalize-action {
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+}
+
+.finalize-hint {
+  color: #ae5a12;
+  font-size: 12px;
+}
+
+.stale-note {
+  margin-top: 6px;
+  color: #8a5a00;
+  font-size: 12px;
+}
+
+.opinion-basis {
+  grid-column: 1 / -1;
+  color: #8298a0;
+  font-size: 11px;
 }
 
 .finalize-note,
